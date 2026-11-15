@@ -1,0 +1,13 @@
+# Sponsored rows, "recommended for you" content and promo services.
+# Format: package.name   # comment     (lines starting with # are ignored)
+# Missing packages are skipped automatically.
+
+com.google.android.tvrecommendations           # feeds sponsored/recommended rows to the home screen
+com.google.android.leanbacklauncher.recommendations  # legacy recommendations service
+com.google.android.partnersetup                # partner (OEM/Walmart) promo + app-install hooks
+
+# Optional - Ambient mode screensaver. It's mostly photos/art, but on some builds
+# it can show "featured" content. Uncomment to remove it (the TV then uses a plain
+# black screensaver or none).
+# com.google.android.apps.tv.dreamx
+# com.google.android.backdrop

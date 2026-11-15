@@ -1,0 +1,4 @@
+source-path=SCRIPTDIR
+source-path=SCRIPTDIR/..
+# usage() is called from handle_common_flag; shared vars are used by the scripts sourcing common.sh
+disable=SC2329,SC2034

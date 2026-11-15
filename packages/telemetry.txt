@@ -1,0 +1,19 @@
+# Telemetry, ad-measurement and "personalization" services.
+# Format: package.name   # comment     (lines starting with # are ignored)
+# Missing packages are skipped automatically.
+
+com.google.android.feedback                    # "send feedback" + usage survey uploader
+com.google.android.adservices.api              # Privacy Sandbox ad services (Topics, ad measurement)
+com.android.adservices.api                     # AOSP name for the same service
+com.google.android.ondevicepersonalization.services  # on-device ad personalization (Android 14)
+com.android.ondevicepersonalization.services
+com.google.android.federatedcompute            # federated learning on your usage data
+com.android.federatedcompute
+com.google.android.as                          # Android System Intelligence
+com.google.android.as.oss                      # Private Compute Services
+com.google.android.onetimeinitializer          # first-run promo initializer
+com.android.traceur                            # system tracing app (Developer options > System tracing)
+com.android.dynsystem                          # Dynamic System Updates (not needed)
+com.android.bips                               # print service (no printer on a TV)
+com.android.printspooler                       # print spooler
+com.android.bookmarkprovider                   # browser bookmarks provider (no browser)

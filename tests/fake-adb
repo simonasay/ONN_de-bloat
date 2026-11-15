@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# A pretend onn 4K box for testing the scripts without a TV.
+# State lives in $FAKE_STATE (installed.txt, disabled.txt, all.txt, home.txt, settings.txt, calls.log).
+set -euo pipefail
+S="${FAKE_STATE:?set FAKE_STATE}"
+echo "$*" >> "$S/calls.log"
+[ "${1:-}" = "-s" ] && shift 2
+
+PROJ=com.spocky.projengmenu/.ui.home.MainActivity
+STOCK=com.google.android.apps.tv.launcherx/.home.HomeActivity
+has()      { grep -qxF "$1" "$S/installed.txt"; }
+disabled() { grep -qxF "$1" "$S/disabled.txt"; }
+del()      { grep -vxF "$1" "$2" > "$2.tmp" || true; mv "$2.tmp" "$2"; }
+lastarg()  { eval "printf '%s' \"\${$#}\""; }
+homes() {
+  for c in "$STOCK" "$PROJ"; do p="${c%%/*}"; if has "$p" && ! disabled "$p"; then echo "$c"; fi; done
+}
+
+case "${1:-}" in
+  devices) printf 'List of devices attached\nfake:5555\tdevice\n\n'; exit 0 ;;
+  get-state) echo device; exit 0 ;;
+  connect) echo "connected to $2"; exit 0 ;;
+  install) echo com.spocky.projengmenu >> "$S/installed.txt"; echo Success; exit 0 ;;
+  reboot) exit 0 ;;
+  shell) shift ;;
+  *) echo "fake-adb: unsupported $*" >&2; exit 1 ;;
+esac
+
+cmd="$*"
+case "$cmd" in
+  "getprop ro.product.brand") echo onn ;;
+  "getprop ro.product.model") echo "onn. 4K Streaming Box" ;;
+  "getprop ro.build.version.release") echo 14 ;;
+  "getprop ro.build.version.sdk") echo 34 ;;
+  getprop*) echo fake ;;
+  "pm list packages")    sed 's/^/package:/' "$S/installed.txt" ;;
+  "pm list packages -e") grep -vxFf "$S/disabled.txt" "$S/installed.txt" | sed 's/^/package:/' || true ;;
+  "pm list packages -d") sed 's/^/package:/' "$S/disabled.txt" ;;
+  "pm list packages -u") sed 's/^/package:/' "$S/all.txt" ;;
+  "pm list packages -s"|"pm list packages -3") sed 's/^/package:/' "$S/installed.txt" ;;
+  "pm uninstall --user 0 "*)
+    p="$(lastarg "$@")"
+    if [ "$p" = "${FAKE_UNINSTALL_FAIL:-}" ]; then echo "Failure [DELETE_FAILED_INTERNAL_ERROR]"; exit 0; fi
+    del "$p" "$S/installed.txt"; echo Success ;;
+  "pm disable-user --user 0 "*) p="$(lastarg "$@")"; echo "$p" >> "$S/disabled.txt"; echo "Package $p new state: disabled-user" ;;
+  "pm enable "*) p="$(lastarg "$@")"; del "$p" "$S/disabled.txt"; echo "Package $p new state: enabled" ;;
+  "cmd package install-existing "*)
+    p="$(lastarg "$@")"
+    if grep -qxF "$p" "$S/all.txt"; then echo "$p" >> "$S/installed.txt"; echo "Package $p installed for user: 0"
+    else echo "Failure [package $p not found]"; fi ;;
+  "cmd package query-activities"*) n=$(homes | grep -c . || true); echo "$n activities found:"; homes | sed 's/^/  /' ;;
+  "cmd package resolve-activity"*)
+    h="$(cat "$S/home.txt")"; p="${h%%/*}"
+    if has "$p" && ! disabled "$p"; then echo "priority=0 preferredOrder=0 match=0x108000"; echo "$h"
+    elif [ -n "$(homes)" ]; then echo "priority=0"; homes | head -1
+    else echo "No activity found"; fi ;;
+  "cmd package set-home-activity "*)
+    [ "${FAKE_HOME_FAIL:-0}" = 1 ] || lastarg "$@" > "$S/home.txt"; echo Success ;;
+  "settings get "*) k="$3 $4"; v="$(grep "^$k " "$S/settings.txt" | cut -d' ' -f3- || true)"; echo "${v:-null}" ;;
+  "settings put "*) k="$3 $4"; del "$(grep "^$k " "$S/settings.txt" || echo x)" "$S/settings.txt"; echo "$k $5" >> "$S/settings.txt" ;;
+  "settings delete "*) k="$3 $4"; del "$(grep "^$k " "$S/settings.txt" || echo x)" "$S/settings.txt" ;;
+  appops*|"pm revoke"*|"pm grant"*|"cmd location"*|"am start"*|"input keyevent"*) ;;
+  *) echo "fake-adb: unsupported shell $cmd" >&2; exit 1 ;;
+esac

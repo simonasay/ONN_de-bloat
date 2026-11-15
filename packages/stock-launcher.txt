@@ -1,0 +1,6 @@
+# The stock Google TV home screen. These get DISABLED (not uninstalled) by
+# scripts/04-launcher.sh, and only after Projectivy is confirmed as the default
+# home app. scripts/restore.sh --launcher turns them back on.
+
+com.google.android.apps.tv.launcherx          # Google TV home screen (where the ads live)
+com.google.android.tungsten.setupwraith       # launcher helper; it re-asserts the stock home if left enabled
