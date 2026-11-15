@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # A pretend onn 4K box for testing the scripts without a TV.
-# State lives in $FAKE_STATE (installed.txt, disabled.txt, all.txt, home.txt, settings.txt, calls.log).
+# State lives in $FAKE_STATE (installed.txt, disabled.txt, all.txt, home.txt, settings.txt, top.txt, calls.log).
+#   FAKE_STICKY_STOCK=1  act like real Google TV: the enabled stock launcher keeps answering
+#                        HOME; Home opens Projectivy only if its accessibility service is on
+#   FAKE_INSTALLER=pkg   who installed Projectivy (default com.android.vending, the Play Store)
 set -euo pipefail
 S="${FAKE_STATE:?set FAKE_STATE}"
 echo "$*" >> "$S/calls.log"
@@ -49,9 +52,24 @@ case "$cmd" in
     if grep -qxF "$p" "$S/all.txt"; then echo "$p" >> "$S/installed.txt"; echo "Package $p installed for user: 0"
     else echo "Failure [package $p not found]"; fi ;;
   "cmd package query-activities"*) n=$(homes | grep -c . || true); echo "$n activities found:"; homes | sed 's/^/  /' ;;
+  "pm list packages -i "*)
+    p="$(lastarg "$@")"; if has "$p"; then echo "package:$p  installer=${FAKE_INSTALLER:-com.android.vending}"; fi ;;
+  "dumpsys activity activities | grep -m1 topResumedActivity")
+    t="$(cat "$S/top.txt" 2>/dev/null || true)"
+    [ -z "$t" ] || echo "  topResumedActivity=ActivityRecord{1a2b u0 $t t100}" ;;
+  "input keyevent KEYCODE_HOME")
+    if [ "${FAKE_STICKY_STOCK:-0}" = 1 ] && has "${STOCK%%/*}" && ! disabled "${STOCK%%/*}"; then
+      if has "${PROJ%%/*}" && grep -q "^secure enabled_accessibility_services .*${PROJ%%/*}/" "$S/settings.txt"
+      then echo "$PROJ" > "$S/top.txt"; else echo "$STOCK" > "$S/top.txt"; fi
+    else
+      "$0" shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME \
+        | tail -1 > "$S/top.txt"
+    fi ;;
   "cmd package resolve-activity"*)
     h="$(cat "$S/home.txt")"; p="${h%%/*}"
-    if has "$p" && ! disabled "$p"; then echo "priority=0 preferredOrder=0 match=0x108000"; echo "$h"
+    if [ "${FAKE_STICKY_STOCK:-0}" = 1 ] && has "${STOCK%%/*}" && ! disabled "${STOCK%%/*}"; then
+      echo "priority=0"; echo "$STOCK"
+    elif has "$p" && ! disabled "$p"; then echo "priority=0 preferredOrder=0 match=0x108000"; echo "$h"
     elif [ -n "$(homes)" ]; then echo "priority=0"; homes | head -1
     else echo "No activity found"; fi ;;
   "cmd package set-home-activity "*)

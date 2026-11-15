@@ -196,6 +196,37 @@ current_home() {
     | tail -1 | tr -d ' '
 }
 
+# Component in the foreground right now, e.g. com.foo/.Main (empty if unknown).
+top_activity() {
+  adb_sh "dumpsys activity activities | grep -m1 topResumedActivity" \
+    | tr ' ' '\n' | grep '/' | head -1 || true
+}
+
+# Does the box really show Projectivy for HOME? While the Google TV launcher is
+# enabled it keeps answering the HOME intent, even after set-home-activity, but
+# Projectivy's "Override current launcher" (an accessibility service) catches the
+# Home button. So if the intent still says Google TV, press Home and look.
+projectivy_is_home() {
+  case "$(current_home)" in "$PROJECTIVY_PKG"/*) return 0 ;; esac
+  "$ADB" shell input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
+  sleep "${HOME_SETTLE:-3}"
+  case "$(top_activity)" in "$PROJECTIVY_PKG"/*) return 0 ;; esac
+  return 1
+}
+
+# Who installed Projectivy (com.android.vending = Play Store).
+projectivy_installer() {
+  adb_sh pm list packages -i "$PROJECTIVY_PKG" | sed -n 's/.*installer=//p' | head -1 || true
+}
+
+# Is Projectivy's accessibility service (needed for the override) turned on?
+projectivy_a11y_on() {
+  case "$(adb_sh settings get secure enabled_accessibility_services)" in
+    *"$PROJECTIVY_PKG"/*) return 0 ;;
+  esac
+  return 1
+}
+
 # First HOME activity component exposed by a package.
 home_component_for() { # pkg
   adb_sh cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME \

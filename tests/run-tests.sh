@@ -2,7 +2,7 @@
 # Runs the toolkit against tests/fake-adb (no TV needed).  Usage: tests/run-tests.sh
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(dirname "$HERE")"
-export ADB="$HERE/fake-adb" ASSUME_YES=1
+export ADB="$HERE/fake-adb" ASSUME_YES=1 HOME_SETTLE=0
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 export LOG_FILE="$WORK/test.log"
 pass=0; fail=0
@@ -30,7 +30,7 @@ P
   : > "$FAKE_STATE/disabled.txt"; : > "$FAKE_STATE/calls.log"
   echo "global private_dns_mode opportunistic" > "$FAKE_STATE/settings.txt"
   echo "com.google.android.apps.tv.launcherx/.home.HomeActivity" > "$FAKE_STATE/home.txt"
-  unset FAKE_HOME_FAIL FAKE_UNINSTALL_FAIL
+  unset FAKE_HOME_FAIL FAKE_UNINSTALL_FAIL FAKE_STICKY_STOCK FAKE_INSTALLER
   rm -rf "$ROOT/backups"; [ -d "$WORK/real-backups" ] || true
 }
 check() { # description, command...
@@ -96,6 +96,29 @@ FAKE_HOME_FAIL=1 "$ROOT/scripts/04-launcher.sh" > "$WORK/out" 2>&1; rc=$?
 check "non-zero exit" test $rc -ne 0
 check "stock launcher untouched" not disabled com.google.android.apps.tv.launcherx
 check "setupwraith untouched" not disabled com.google.android.tungsten.setupwraith
+
+A11Y="secure enabled_accessibility_services com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService"
+
+echo "Google TV keeps HOME, but Projectivy's override catches the Home button"
+reset_box
+echo com.spocky.projengmenu >> "$FAKE_STATE/installed.txt"
+echo "$A11Y" >> "$FAKE_STATE/settings.txt"
+FAKE_STICKY_STOCK=1 "$ROOT/scripts/04-launcher.sh" > "$WORK/out" 2>&1; rc=$?
+[ $rc -eq 0 ] || cat "$WORK/out"
+check "exit 0" test $rc -eq 0
+check "stock launcher disabled" disabled com.google.android.apps.tv.launcherx
+check "setupwraith disabled" disabled com.google.android.tungsten.setupwraith
+check "pressed Home to check" grep -q 'shell input keyevent KEYCODE_HOME' "$FAKE_STATE/calls.log"
+
+echo "Google TV keeps HOME and the override is off (sideloaded Projectivy)"
+reset_box
+echo com.spocky.projengmenu >> "$FAKE_STATE/installed.txt"
+FAKE_STICKY_STOCK=1 FAKE_INSTALLER=com.google.android.packageinstaller \
+  "$ROOT/scripts/04-launcher.sh" > "$WORK/out" 2>&1; rc=$?
+check "non-zero exit" test $rc -ne 0
+check "stock launcher untouched" not disabled com.google.android.apps.tv.launcherx
+check "explains sideloading" grep -q 'sideloaded' "$WORK/out"
+check "explains accessibility" grep -q 'Accessibility > Projectivy Launcher > ON' "$WORK/out"
 
 echo "NEVER-REMOVE guard"
 reset_box

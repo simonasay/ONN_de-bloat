@@ -38,6 +38,8 @@ elif [ -n "$APK" ]; then
   [ -f "$APK" ] || die "APK not found: $APK"
   run_adb install "$APK"
   refresh_pkgs
+  warn "Installed from an APK. Android 13+ won't let sideloaded apps use accessibility,"
+  note "so Projectivy's 'Override current launcher' may not work. The Play Store version has no such limit."
 else
   note "Opening its Play Store page on the TV. Select 'Install' with the remote."
   run_sh am start -a android.intent.action.VIEW -d "market://details?id=$PROJECTIVY_PKG" || true
@@ -74,12 +76,23 @@ info "Step 3/4: Verify"
 if [ "$DRY_RUN" = 1 ]; then
   note "[dry-run] would check that HOME resolves to $PROJECTIVY_PKG"
 else
-  home="$(current_home)"
-  case "$home" in
-    "$PROJECTIVY_PKG"/*) ok "HOME -> $home" ;;
-    *) die "HOME still resolves to '$home', not Projectivy. Stock launcher left untouched.
-  Try: in Projectivy's settings turn on 'Override current launcher', then re-run." ;;
-  esac
+  if projectivy_is_home; then
+    ok "Home opens Projectivy"
+  else
+    warn "Pressing Home still opens '$(top_activity)', not Projectivy. Stock launcher left untouched."
+    if ! projectivy_a11y_on; then
+      installer="$(projectivy_installer)"
+      if [ -n "$installer" ] && [ "$installer" != com.android.vending ]; then
+        note "Projectivy was sideloaded (installer: $installer). Android blocks accessibility for"
+        note "sideloaded apps, so its Accessibility switch turns itself back off. Reinstall it from Play:"
+        note "  adb uninstall $PROJECTIVY_PKG   then re-run this script without --apk"
+      fi
+      note "Google TV keeps the Home button until Projectivy's override is on. On the TV:"
+      note "  Projectivy settings > Override current launcher > ON"
+      note "  Settings > System > Accessibility > Projectivy Launcher > ON"
+    fi
+    die "Projectivy isn't home yet. Fix the above, then re-run this script."
+  fi
 fi
 
 # 4. Disable stock launcher
@@ -92,13 +105,13 @@ else
     if run_sh pm disable-user --user 0 "$pkg"; then ok "$pkg disabled"; else warn "$pkg: $RUN_OUT"; fi
   done
   if [ "$DRY_RUN" != 1 ]; then
-    home="$(current_home)"
-    case "$home" in
-      "$PROJECTIVY_PKG"/*) ok "HOME -> $home" ;;
-      *) warn "HOME resolves to '$home' after disabling. Re-enabling the stock launcher to be safe."
-         "$(dirname "$0")/restore.sh" --launcher --yes
-         exit 1 ;;
-    esac
+    if projectivy_is_home; then
+      ok "Home still opens Projectivy"
+    else
+      warn "Home opens '$(top_activity)' after disabling. Re-enabling the stock launcher to be safe."
+      "$(dirname "$0")/restore.sh" --launcher --yes
+      exit 1
+    fi
   fi
 fi
 run_sh input keyevent KEYCODE_HOME || true
